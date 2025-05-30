@@ -1,18 +1,37 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import {
   TapGestureHandler,
   LongPressGestureHandler,
+  PanGestureHandler,
+  FlingGestureHandler,
   State,
+  Directions,
 } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedGestureHandler,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 
 const SINGLE_TAP_POINTS = 1;
-const DOUBLE_TAP_POINTS = 2; // "Подвійна кількість очок" порівняно з базовим одиночним
+const DOUBLE_TAP_POINTS = 2;
 const LONG_PRESS_POINTS = 5;
-const LONG_PRESS_DURATION_MS = 500; // Тривалість довгого натискання для бонусних очок
+const LONG_PRESS_DURATION_MS = 500;
+const FLING_MAX_POINTS = 10;
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const OBJECT_SIZE = 150;
 
 export default function GameScreen() {
   const [score, setScore] = useState(0);
+
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
 
   const onSingleTapEvent = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
@@ -32,6 +51,42 @@ export default function GameScreen() {
     }
   };
 
+  const panGestureHandler = useAnimatedGestureHandler({
+    onStart: (_, ctx) => {
+      ctx.startX = translateX.value;
+      ctx.startY = translateY.value;
+    },
+    onActive: (event, ctx) => {
+      translateX.value = ctx.startX + event.translationX;
+      translateY.value = ctx.startY + event.translationY;
+    },
+    onEnd: (_) => {
+      // Optional: Snap back or apply physics
+      // translateX.value = withSpring(startX.value);
+      // translateY.value = withSpring(startY.value);
+    },
+  });
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+      ],
+    };
+  });
+
+  const addScore = (points) => {
+    setScore((prevScore) => prevScore + points);
+  };
+
+  const onFlingEvent = (event) => {
+    if (event.nativeEvent.state === State.ACTIVE) {
+      const randomPoints = Math.floor(Math.random() * FLING_MAX_POINTS) + 1;
+      runOnJS(addScore)(randomPoints);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Гра-клікер</Text>
@@ -39,24 +94,33 @@ export default function GameScreen() {
         <Text style={styles.scoreText}>Очки: {score}</Text>
       </View>
       <View style={styles.gameArea}>
-        <LongPressGestureHandler
-          onHandlerStateChange={onLongPressEvent}
-          minDurationMs={LONG_PRESS_DURATION_MS}
-        >
-          <TapGestureHandler
-            onHandlerStateChange={onDoubleTapEvent}
-            numberOfTaps={2}
-          >
-            <TapGestureHandler
-              onHandlerStateChange={onSingleTapEvent}
-              numberOfTaps={1}
+        <PanGestureHandler onGestureEvent={panGestureHandler}>
+          <Animated.View style={animatedStyle}>
+            <FlingGestureHandler
+              direction={Directions.RIGHT | Directions.LEFT | Directions.UP | Directions.DOWN}
+              onHandlerStateChange={onFlingEvent}
             >
-              <View style={styles.clickableObject}>
-                <Text style={styles.objectText}>Натисни!</Text>
-              </View>
-            </TapGestureHandler>
-          </TapGestureHandler>
-        </LongPressGestureHandler>
+              <LongPressGestureHandler
+                onHandlerStateChange={onLongPressEvent}
+                minDurationMs={LONG_PRESS_DURATION_MS}
+              >
+                <TapGestureHandler
+                  onHandlerStateChange={onDoubleTapEvent}
+                  numberOfTaps={2}
+                >
+                  <TapGestureHandler
+                    onHandlerStateChange={onSingleTapEvent}
+                    numberOfTaps={1}
+                  >
+                    <Animated.View style={styles.clickableObject}>
+                      <Text style={styles.objectText}>Тягни!</Text>
+                    </Animated.View>
+                  </TapGestureHandler>
+                </TapGestureHandler>
+              </LongPressGestureHandler>
+            </FlingGestureHandler>
+          </Animated.View>
+        </PanGestureHandler>
       </View>
     </View>
   );
@@ -91,14 +155,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
+    overflow: 'hidden', 
   },
   clickableObject: {
-    width: 150,
-    height: 150,
+    width: OBJECT_SIZE,
+    height: OBJECT_SIZE,
     backgroundColor: 'skyblue',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 75,
+    borderRadius: OBJECT_SIZE / 2,
     borderWidth: 3,
     borderColor: 'blue',
     elevation: 5,
