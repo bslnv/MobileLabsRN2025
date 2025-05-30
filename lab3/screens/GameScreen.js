@@ -5,6 +5,7 @@ import {
   LongPressGestureHandler,
   PanGestureHandler,
   FlingGestureHandler,
+  PinchGestureHandler, // Додано
   State,
   Directions,
 } from 'react-native-gesture-handler';
@@ -21,6 +22,7 @@ const DOUBLE_TAP_POINTS = 2;
 const LONG_PRESS_POINTS = 5;
 const LONG_PRESS_DURATION_MS = 500;
 const FLING_MAX_POINTS = 10;
+const PINCH_BONUS_POINTS = 10; // Бонус за масштабування
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const OBJECT_SIZE = 150;
@@ -30,24 +32,27 @@ export default function GameScreen() {
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const startX = useSharedValue(0);
-  const startY = useSharedValue(0);
+  const scale = useSharedValue(1); // Shared value для масштабу
+
+  const addScore = (points) => {
+    setScore((prevScore) => prevScore + points);
+  };
 
   const onSingleTapEvent = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
-      setScore((prevScore) => prevScore + SINGLE_TAP_POINTS);
+      addScore(SINGLE_TAP_POINTS);
     }
   };
 
   const onDoubleTapEvent = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
-      setScore((prevScore) => prevScore + DOUBLE_TAP_POINTS);
+      addScore(DOUBLE_TAP_POINTS);
     }
   };
 
   const onLongPressEvent = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
-      setScore((prevScore) => prevScore + LONG_PRESS_POINTS);
+      addScore(LONG_PRESS_POINTS);
     }
   };
 
@@ -61,9 +66,24 @@ export default function GameScreen() {
       translateY.value = ctx.startY + event.translationY;
     },
     onEnd: (_) => {
-      // Optional: Snap back or apply physics
-      // translateX.value = withSpring(startX.value);
-      // translateY.value = withSpring(startY.value);
+      // Можна додати логіку повернення або анімації
+    },
+  });
+
+  const pinchGestureHandler = useAnimatedGestureHandler({
+    onStart: (_, ctx) => {
+      ctx.startScale = scale.value;
+    },
+    onActive: (event, ctx) => {
+      scale.value = ctx.startScale * event.scale;
+    },
+    onEnd: (_, ctx) => {
+      // Якщо відбулося масштабування, додаємо очки
+      if (scale.value !== ctx.startScale && scale.value !== 1) { // Перевіряємо, чи масштаб змінився
+         runOnJS(addScore)(PINCH_BONUS_POINTS);
+      }
+      // Можна додати анімацію повернення до початкового масштабу:
+      // scale.value = withSpring(1);
     },
   });
 
@@ -72,13 +92,10 @@ export default function GameScreen() {
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
+        { scale: scale.value }, // Додано масштабування
       ],
     };
   });
-
-  const addScore = (points) => {
-    setScore((prevScore) => prevScore + points);
-  };
 
   const onFlingEvent = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
@@ -94,33 +111,37 @@ export default function GameScreen() {
         <Text style={styles.scoreText}>Очки: {score}</Text>
       </View>
       <View style={styles.gameArea}>
-        <PanGestureHandler onGestureEvent={panGestureHandler}>
-          <Animated.View style={animatedStyle}>
-            <FlingGestureHandler
-              direction={Directions.RIGHT | Directions.LEFT | Directions.UP | Directions.DOWN}
-              onHandlerStateChange={onFlingEvent}
-            >
-              <LongPressGestureHandler
-                onHandlerStateChange={onLongPressEvent}
-                minDurationMs={LONG_PRESS_DURATION_MS}
-              >
-                <TapGestureHandler
-                  onHandlerStateChange={onDoubleTapEvent}
-                  numberOfTaps={2}
+        <PinchGestureHandler onGestureEvent={pinchGestureHandler}>
+          <Animated.View>
+            <PanGestureHandler onGestureEvent={panGestureHandler}>
+              <Animated.View style={animatedStyle}>
+                <FlingGestureHandler
+                  direction={Directions.RIGHT | Directions.LEFT | Directions.UP | Directions.DOWN}
+                  onHandlerStateChange={onFlingEvent}
                 >
-                  <TapGestureHandler
-                    onHandlerStateChange={onSingleTapEvent}
-                    numberOfTaps={1}
+                  <LongPressGestureHandler
+                    onHandlerStateChange={onLongPressEvent}
+                    minDurationMs={LONG_PRESS_DURATION_MS}
                   >
-                    <Animated.View style={styles.clickableObject}>
-                      <Text style={styles.objectText}>Тягни!</Text>
-                    </Animated.View>
-                  </TapGestureHandler>
-                </TapGestureHandler>
-              </LongPressGestureHandler>
-            </FlingGestureHandler>
+                    <TapGestureHandler
+                      onHandlerStateChange={onDoubleTapEvent}
+                      numberOfTaps={2}
+                    >
+                      <TapGestureHandler
+                        onHandlerStateChange={onSingleTapEvent}
+                        numberOfTaps={1}
+                      >
+                        <Animated.View style={styles.clickableObject}>
+                          <Text style={styles.objectText}>Клікай!</Text>
+                        </Animated.View>
+                      </TapGestureHandler>
+                    </TapGestureHandler>
+                  </LongPressGestureHandler>
+                </FlingGestureHandler>
+              </Animated.View>
+            </PanGestureHandler>
           </Animated.View>
-        </PanGestureHandler>
+        </PinchGestureHandler>
       </View>
     </View>
   );
@@ -155,7 +176,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    overflow: 'hidden', 
+    overflow: 'hidden',
   },
   clickableObject: {
     width: OBJECT_SIZE,
