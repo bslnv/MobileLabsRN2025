@@ -163,6 +163,31 @@ export default function FileManagerScreen({ route, navigation }) {
         setSelectedItemForInfo(item); 
         setInfoModalVisible(true); 
     };
+
+    const handleDeleteItem = async (itemToDelete) => {
+        const itemType = itemToDelete.isDirectory ? 'Папку' : 'Файл';
+        Alert.alert(
+            `Видалити ${itemType.toLowerCase()}`,
+            `Ви впевнені, що хочете видалити ${itemType.toLowerCase()} "${itemToDelete.name}"? Цю дію не можна буде скасувати.`,
+            [
+                { text: 'Скасувати', style: 'cancel' },
+                {
+                    text: 'Видалити',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await FileSystem.deleteAsync(itemToDelete.uri, { idempotent: true });
+                            Alert.alert('Успіх', `${itemType} "${itemToDelete.name}" видалено.`);
+                            loadDirectoryContents(currentPath); // Оновлюємо список
+                        } catch (error) {
+                            console.error(`Error deleting ${itemType.toLowerCase()}:`, error);
+                            Alert.alert('Помилка', `Не вдалося видалити ${itemType.toLowerCase()}.`);
+                        }
+                    },
+                },
+            ]
+        );
+    };
     
     const isAtRootForDisplay = currentPath === basePath;
 
@@ -199,7 +224,14 @@ export default function FileManagerScreen({ route, navigation }) {
 
             <FlatList
                 data={items}
-                renderItem={({item}) => <FileListItem item={item} onPressItem={handleItemPress} onShowInfo={handleShowInfo} /> }
+                renderItem={({item}) => (
+                    <FileListItem 
+                        item={item} 
+                        onPressItem={handleItemPress} 
+                        onShowInfo={handleShowInfo}
+                        onDeleteItem={handleDeleteItem} // Передаємо нову функцію
+                    /> 
+                )}
                 keyExtractor={(item) => item.uri}
                 ListEmptyComponent={<Text style={styles.emptyListText}>Папка порожня</Text>}
                 contentContainerStyle={{ paddingBottom: 80 }}
@@ -218,12 +250,12 @@ export default function FileManagerScreen({ route, navigation }) {
             
             <CreateFileModal 
                 visible={isFileModalVisible}
-                onClose={() => {setFileModalVisible(false); setNewFileName(''); setNewFileContent('');}}
+                onClose={() => {setFileModalVisible(false);}}
                 onCreate={handleCreateFile}
             />
             <CreateFolderModal
                 visible={isFolderModalVisible}
-                onClose={() => {setFolderModalVisible(false); setNewFolderName('');}}
+                onClose={() => {setFolderModalVisible(false);}}
                 onCreate={handleCreateFolder}
             />
             <InfoModal

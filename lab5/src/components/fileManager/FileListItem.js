@@ -4,7 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../../styles/theme';
 import { formatBytes } from '../../utils/formatBytes';
 
-const FileListItem = ({ item, onPressItem, onShowInfo }) => {
+const FileListItem = ({ item, onPressItem, onShowInfo, onDeleteItem }) => { // Додано onDeleteItem
   return (
     <TouchableOpacity onPress={() => onPressItem(item)} style={styles.itemOuterContainer}>
       <View style={styles.itemInnerContainer}>
@@ -20,8 +20,11 @@ const FileListItem = ({ item, onPressItem, onShowInfo }) => {
             {item.isDirectory ? 'Папка' : `Файл • ${formatBytes(item.size)}`}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => onShowInfo(item)} style={styles.infoButton}>
+        <TouchableOpacity onPress={() => onShowInfo(item)} style={styles.actionIcon}>
           <Ionicons name="information-circle-outline" size={26} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onDeleteItem(item)} style={styles.actionIcon}> {/* Нова кнопка видалення */}
+          <Ionicons name="trash-outline" size={24} color={theme.colors.destructive} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -35,8 +38,8 @@ const styles = StyleSheet.create({
   itemInnerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: theme.spacing.medium - 2, 
-    paddingHorizontal: theme.spacing.medium,   
+    paddingVertical: theme.spacing.medium - 2,
+    paddingHorizontal: theme.spacing.medium,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderColor,
   },
@@ -54,7 +57,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.caption,
     color: theme.colors.textSecondary,
   },
-  infoButton: {
+  actionIcon: { 
     paddingLeft: theme.spacing.medium,
     paddingVertical: theme.spacing.small,
   },
