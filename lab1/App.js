@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import NewsScreen from './screens/NewsScreen';
 import GalleryScreen from './screens/GalleryScreen';
+import RegisterScreen from './screens/RegisterScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Image } from 'react-native';
 
@@ -24,6 +25,8 @@ export default function App() {
                 iconName = 'home';
               } else if (route.name === 'Галерея') {
                 iconName = 'images';
+              }else if (route.name === 'Реєстрація') {
+                iconName = 'person';
               }
               return <Ionicons name={iconName} size={size} color={color} />;
             },
@@ -33,6 +36,7 @@ export default function App() {
         >
           <Tab.Screen name="Новини" component={NewsScreen} />
           <Tab.Screen name="Галерея" component={GalleryScreen} />
+          <Tab.Screen name="Реєстрація" component={RegisterScreen} />
         </Tab.Navigator>
         <Text style={styles.footerText}>
           Слинюк Богдан Вадимович ІПЗ-21-5
