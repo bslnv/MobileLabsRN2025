@@ -23,18 +23,22 @@ export default function FileManagerScreen({ route, navigation }) {
     const [selectedItemForInfo, setSelectedItemForInfo] = useState(null);
 
     useLayoutEffect(() => {
-        let displayPath = currentPath.replace(FileSystem.documentDirectory, 'Documents/');
-        if (displayPath.startsWith('Documents/AppData') && displayPath.length > "Documents/AppData".length + 1) {
+        let displayPath = currentPath;
+        if (currentPath.startsWith(FileSystem.documentDirectory)) {
+            displayPath = currentPath.replace(FileSystem.documentDirectory, 'Documents/');
+        }
+        
+        if (displayPath.startsWith('Documents/AppData/') && displayPath.length > "Documents/AppData/".length) {
             displayPath = "AppData/" + displayPath.substring("Documents/AppData/".length);
         } else if (displayPath === 'Documents/AppData') {
             displayPath = "AppData";
         }
 
         if (displayPath.length > 25) {
-            displayPath = "..." + displayPath.slice(-22);
+            displayPath = "..." + displayPath.slice(displayPath.length - 22);
         }
         navigation.setOptions({ 
-            title: displayPath,
+            title: displayPath || 'Файли',
             headerBackTitleVisible: false,
         });
     }, [navigation, currentPath]);
@@ -42,7 +46,13 @@ export default function FileManagerScreen({ route, navigation }) {
     const ensureDirExists = async (dirPath) => {
         const dirInfo = await FileSystem.getInfoAsync(dirPath);
         if (!dirInfo.exists) {
-            await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
+            try {
+                await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
+            } catch (e) {
+                console.error("Failed to ensure directory exists", e);
+                Alert.alert("Помилка", "Не вдалося створити необхідну директорію.");
+                throw e;
+            }
         }
     };
 
@@ -54,7 +64,12 @@ export default function FileManagerScreen({ route, navigation }) {
             const detailedItems = await Promise.all(
                 result.map(async (name) => {
                     const itemPath = `${path}/${name}`;
-                    const info = await FileSystem.getInfoAsync(itemPath, { size: true, modificationTime: true });
+                    let info = { name, isDirectory: false, uri: itemPath, size: 0, modificationTime: 0 }; 
+                    try {
+                         info = await FileSystem.getInfoAsync(itemPath, { size: true, modificationTime: true });
+                    } catch (e) {
+                        console.warn(`Could not get info for ${itemPath}`, e);
+                    }
                     return {
                         name,
                         isDirectory: info.isDirectory,
@@ -72,9 +87,10 @@ export default function FileManagerScreen({ route, navigation }) {
             setItems(detailedItems);
         } catch (error) {
             console.error('Error loading directory:', error);
-            Alert.alert('Помилка', `Не вдалося завантажити вміст папки: ${path.split('/').pop()}`);
-            if (path !== basePath && path !== FileSystem.documentDirectory) {
-                goUpOneLevel();
+            Alert.alert('Помилка доступу', `Не вдалося завантажити вміст папки: ${path.split('/').pop()}. Можливо, немає дозволу.`);
+            if (path !== basePath && currentPath !== basePath) { 
+                goUpOneLevel(true); 
+            } else if (path === basePath && items.length === 0) {
             }
         } finally {
             setIsLoading(false);
@@ -82,13 +98,12 @@ export default function FileManagerScreen({ route, navigation }) {
     };
     
     useEffect(() => {
-        ensureDirExists(basePath).then(() => {
-            if (currentPath === basePath) { 
-                 loadDirectoryContents(currentPath);
-            } else {
-                 setCurrentPath(basePath);
-            }
-        });
+        if (basePath) {
+            setCurrentPath(prevPath => {
+                if(prevPath !== basePath) return basePath;
+                return prevPath; 
+            });
+        }
     }, [basePath]);
 
     useEffect(() => {
@@ -105,30 +120,16 @@ export default function FileManagerScreen({ route, navigation }) {
         }
     };
 
-    const goUpOneLevel = () => {
-        if (currentPath === basePath) return;
-        if (currentPath === FileSystem.documentDirectory && basePath.startsWith(FileSystem.documentDirectory) && basePath !== FileSystem.documentDirectory ) {
-        } else if (currentPath === FileSystem.documentDirectory && basePath === FileSystem.documentDirectory ) {
-             return;
-        } else if (currentPath === FileSystem.documentDirectory) {
+    const goUpOneLevel = (isErrorFallback = false) => {
+        if (currentPath === basePath) {
+            if (isErrorFallback) Alert.alert("Критична помилка", "Не вдається завантажити базову директорію.");
             return;
         }
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
-        if (parentPath && parentPath.length >= basePath.length -1 && parentPath.startsWith(basePath.substring(0,basePath.lastIndexOf('/'))) ) {
-            if(parentPath.length < basePath.length){
-                setCurrentPath(basePath);
-            } else {
-                setCurrentPath(parentPath);
-            }
-        } else if (parentPath && parentPath.length >= FileSystem.documentDirectory.length -1 && parentPath.startsWith(FileSystem.documentDirectory.substring(0,FileSystem.documentDirectory.lastIndexOf('/'))) && basePath.startsWith(FileSystem.documentDirectory) ) {
-             if(parentPath.length < FileSystem.documentDirectory.length){
-                setCurrentPath(FileSystem.documentDirectory);
-            } else {
-                setCurrentPath(parentPath);
-            }
-        }
-        else {
-             setCurrentPath(basePath);
+        if (parentPath && parentPath.length >= basePath.length) {
+            setCurrentPath(parentPath);
+        } else {
+            setCurrentPath(basePath);
         }
     };
 
@@ -163,13 +164,9 @@ export default function FileManagerScreen({ route, navigation }) {
         setInfoModalVisible(true); 
     };
     
-    const isEffectivelyAtRoot = () => {
-        if (currentPath === basePath) return true;
-        if (basePath === FileSystem.documentDirectory && currentPath === FileSystem.documentDirectory) return true;
-        return false;
-    };
+    const isAtRootForDisplay = currentPath === basePath;
 
-    if (isLoading && items.length === 0 && currentPath === basePath && !currentPath.includes('AppData')) { 
+    if (isLoading && items.length === 0) { 
         return (
             <SafeAreaView style={[styles.fullScreenCentered]} edges={['bottom', 'left', 'right']}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -181,24 +178,24 @@ export default function FileManagerScreen({ route, navigation }) {
         <SafeAreaView style={styles.safeAreaContainer} edges={['bottom', 'left', 'right']}>
             <View style={styles.navigationHeader}>
                 <TouchableOpacity
-                    onPress={goUpOneLevel}
+                    onPress={() => goUpOneLevel()}
                     style={styles.upButton}
-                    disabled={isEffectivelyAtRoot()}
+                    disabled={isAtRootForDisplay}
                 >
                     <Ionicons
                         name="arrow-up-circle-outline"
                         size={28}
-                        color={isEffectivelyAtRoot() ? theme.colors.disabled : theme.colors.primary} />
+                        color={isAtRootForDisplay ? theme.colors.disabled : theme.colors.primary} />
                     <Text
                         style={[
                             styles.upButtonText,
-                            isEffectivelyAtRoot() && styles.disabledText
+                            isAtRootForDisplay && styles.disabledText
                         ]}
                     > Вгору</Text>
                 </TouchableOpacity>
             </View>
 
-            {isLoading && <ActivityIndicator size="small" color={theme.colors.primary} style={styles.loadingIndicator} />}
+            {isLoading && items.length > 0 && <ActivityIndicator size="small" color={theme.colors.primary} style={styles.loadingIndicator} />}
 
             <FlatList
                 data={items}
@@ -221,12 +218,12 @@ export default function FileManagerScreen({ route, navigation }) {
             
             <CreateFileModal 
                 visible={isFileModalVisible}
-                onClose={() => setFileModalVisible(false)}
+                onClose={() => {setFileModalVisible(false); setNewFileName(''); setNewFileContent('');}}
                 onCreate={handleCreateFile}
             />
             <CreateFolderModal
                 visible={isFolderModalVisible}
-                onClose={() => setFolderModalVisible(false)}
+                onClose={() => {setFolderModalVisible(false); setNewFolderName('');}}
                 onCreate={handleCreateFolder}
             />
             <InfoModal
@@ -273,6 +270,7 @@ const styles = StyleSheet.create({
     },
     loadingIndicator: {
         marginVertical: theme.spacing.small,
+        alignSelf: 'center',
     },
     emptyListText: { 
         textAlign: 'center', 
