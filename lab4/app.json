@@ -20,6 +20,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.bdslnv.lab4",
       "edgeToEdgeEnabled": true
     },
     "web": {

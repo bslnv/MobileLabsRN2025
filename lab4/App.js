@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,46 @@ import {
   FlatList,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  Alert
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+async function registerForPushNotificationsAsync() {
+  let token;
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== 'granted') {
+    Alert.alert('Помилка', 'Не вдалося отримати дозвіл на push-сповіщення!');
+    return;
+  }
+  
+  return token;
+}
+
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
@@ -21,17 +57,71 @@ export default function App() {
   const [mode, setMode] = useState('date');
   const [showPicker, setShowPicker] = useState(false);
 
-  const addTask = () => {
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response received: ', response);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
+
+  const scheduleNotificationForTask = async (task) => {
+    const trigger = new Date(task.reminderTime);
+    if (trigger.getTime() <= Date.now()) {
+      Alert.alert("Увага", "Час нагадування вже минув. Сповіщення не буде заплановано.");
+      return null;
+    }
+
+    try {
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Нагадування про завдання!",
+          body: task.title,
+          data: { taskId: task.id }, 
+        },
+        trigger,
+      });
+      return notificationId;
+    } catch (e) {
+      console.error("Помилка планування сповіщення:", e);
+      Alert.alert("Помилка", "Не вдалося запланувати сповіщення.");
+      return null;
+    }
+  };
+
+  const addTask = async () => {
     if (title.trim() === '') {
-      alert('Будь ласка, введіть назву завдання.');
+      Alert.alert('Увага', 'Будь ласка, введіть назву завдання.');
       return;
     }
+
+    const reminderDateTime = new Date(date);
+    let notificationId = null;
+
+    if (reminderDateTime.getTime() > Date.now()) {
+        notificationId = await scheduleNotificationForTask({ 
+            id: 'temp', 
+            title, 
+            description, 
+            reminderTime: reminderDateTime 
+        });
+    } else {
+        Alert.alert("Увага", "Обраний час нагадування вже минув. Завдання буде додано без сповіщення.");
+    }
+    
     const newTask = {
       id: Math.random().toString(36).substr(2, 9),
       title,
       description,
-      reminderTime: new Date(date), 
+      reminderTime: reminderDateTime,
+      notificationId: notificationId,
     };
+
     setTasks(currentTasks => [...currentTasks, newTask]);
     setTitle('');
     setDescription('');
@@ -70,6 +160,7 @@ export default function App() {
         <Text style={styles.taskReminder}>
           Нагадати: {item.reminderTime.toLocaleDateString()} {item.reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
+        {item.notificationId && <Text style={styles.notificationStatusText}>Сповіщення заплановано</Text>}
       </View>
       <TouchableOpacity onPress={() => deleteTask(item.id)} style={styles.deleteButton}>
         <Text style={styles.deleteButtonText}>✕</Text>
@@ -114,8 +205,9 @@ export default function App() {
             value={date}
             mode={mode}
             is24Hour={true}
-            display="default"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={onChangeDateTime}
+            minimumDate={new Date()} 
           />
         )}
 
@@ -174,6 +266,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderRadius: 5,
     alignItems: 'center',
+    flex: 1, 
+    marginHorizontal: 5,
   },
   dateButtonText: {
     color: 'white',
@@ -237,6 +331,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#007bff',
     marginTop: 6,
+  },
+  notificationStatusText: {
+    fontSize: 10,
+    color: 'green',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   deleteButton: {
     backgroundColor: '#ff4d4d',
