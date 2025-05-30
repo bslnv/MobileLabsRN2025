@@ -1,13 +1,12 @@
-import React from 'react'; 
 import styled from 'styled-components/native';
 import { Image, TouchableOpacity } from 'react-native';
 
 const Card = styled.View`
   background-color: ${({ theme }) => theme.cardBackground};
   border-radius: 8px;
-  margin: 10px; 
+  margin: 10px;
   overflow: hidden;
-  width: 45%; 
+  width: 180px;
 `;
 
 const ImageWrapper = styled(Image)`
@@ -18,8 +17,7 @@ const ImageWrapper = styled(Image)`
 const Title = styled.Text`
   color: ${({ theme }) => theme.text};
   font-size: 16px;
-  padding: 10px 10px 5px 10px; 
-  font-weight: bold;
+  padding: 10px;
 `;
 
 const Price = styled.Text`
@@ -33,7 +31,7 @@ export default function GameCard({ title, price, image, onPress }) {
     <TouchableOpacity onPress={onPress}>
       <Card>
         <ImageWrapper source={{ uri: image }} />
-        <Title numberOfLines={1}>{title}</Title> 
+        <Title>{title}</Title>
         <Price>{price}</Price>
       </Card>
     </TouchableOpacity>
