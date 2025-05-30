@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
-    View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator, Platform
+    View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../styles/theme';
 import FileListItem from '../components/fileManager/FileListItem';
+import CreateFileModal from '../components/fileManager/CreateFileModal';
+import CreateFolderModal from '../components/fileManager/CreateFolderModal';
+import InfoModal from '../components/fileManager/InfoModal';
 
 export default function FileManagerScreen({ route, navigation }) {
     const { basePath } = route.params;
@@ -15,12 +18,7 @@ export default function FileManagerScreen({ route, navigation }) {
     const [isLoading, setIsLoading] = useState(false);
 
     const [isFileModalVisible, setFileModalVisible] = useState(false);
-    const [newFileName, setNewFileName] = useState('');
-    const [newFileContent, setNewFileContent] = useState('');
-
     const [isFolderModalVisible, setFolderModalVisible] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
-
     const [isInfoModalVisible, setInfoModalVisible] = useState(false);
     const [selectedItemForInfo, setSelectedItemForInfo] = useState(null);
 
@@ -87,16 +85,17 @@ export default function FileManagerScreen({ route, navigation }) {
         ensureDirExists(basePath).then(() => {
             if (currentPath === basePath) { 
                  loadDirectoryContents(currentPath);
+            } else {
+                 setCurrentPath(basePath);
             }
         });
-    }, []);
+    }, [basePath]);
 
     useEffect(() => {
         if (currentPath) {
             loadDirectoryContents(currentPath);
         }
     }, [currentPath]);
-
 
     const handleItemPress = (item) => {
         if (item.isDirectory) {
@@ -109,27 +108,68 @@ export default function FileManagerScreen({ route, navigation }) {
     const goUpOneLevel = () => {
         if (currentPath === basePath) return;
         if (currentPath === FileSystem.documentDirectory && basePath.startsWith(FileSystem.documentDirectory) && basePath !== FileSystem.documentDirectory ) {
+        } else if (currentPath === FileSystem.documentDirectory && basePath === FileSystem.documentDirectory ) {
+             return;
         } else if (currentPath === FileSystem.documentDirectory) {
-            return; 
+            return;
         }
-
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
-        if (parentPath && parentPath.length >= Math.min(basePath.length, FileSystem.documentDirectory ? FileSystem.documentDirectory.length : basePath.length) && (parentPath.startsWith(basePath.substring(0, basePath.lastIndexOf('/'))) || parentPath.startsWith(FileSystem.documentDirectory.substring(0, FileSystem.documentDirectory.lastIndexOf('/'))))) {
-           if (parentPath.length < basePath.length && !basePath.startsWith(parentPath)) {
-                setCurrentPath(basePath); 
-           } else {
+        if (parentPath && parentPath.length >= basePath.length -1 && parentPath.startsWith(basePath.substring(0,basePath.lastIndexOf('/'))) ) {
+            if(parentPath.length < basePath.length){
+                setCurrentPath(basePath);
+            } else {
                 setCurrentPath(parentPath);
-           }
-        } else {
-             setCurrentPath(basePath); 
+            }
+        } else if (parentPath && parentPath.length >= FileSystem.documentDirectory.length -1 && parentPath.startsWith(FileSystem.documentDirectory.substring(0,FileSystem.documentDirectory.lastIndexOf('/'))) && basePath.startsWith(FileSystem.documentDirectory) ) {
+             if(parentPath.length < FileSystem.documentDirectory.length){
+                setCurrentPath(FileSystem.documentDirectory);
+            } else {
+                setCurrentPath(parentPath);
+            }
+        }
+        else {
+             setCurrentPath(basePath);
         }
     };
 
-    const showCreateFileModal = () => { setNewFileName(''); setNewFileContent(''); setFileModalVisible(true); };
-    const showCreateFolderModal = () => { setNewFolderName(''); setFolderModalVisible(true); };
-    const handleShowInfo = (item) => { setSelectedItemForInfo(item); setInfoModalVisible(true); };
+    const handleCreateFile = async (fileName, fileContent) => { 
+        const filePath = `${currentPath}/${fileName}`; 
+        try { 
+            await FileSystem.writeAsStringAsync(filePath, fileContent, { encoding: FileSystem.EncodingType.UTF8 }); 
+            setFileModalVisible(false); 
+            loadDirectoryContents(currentPath); 
+            Alert.alert('Успіх', `Файл "${fileName}" створено.`); 
+        } catch (error) { 
+            console.error('Error creating file:', error); 
+            Alert.alert('Помилка', 'Не вдалося створити файл.'); 
+        } 
+    };
+    
+    const handleCreateFolder = async (folderName) => { 
+        const folderPath = `${currentPath}/${folderName}`; 
+        try { 
+            await FileSystem.makeDirectoryAsync(folderPath); 
+            setFolderModalVisible(false); 
+            loadDirectoryContents(currentPath); 
+            Alert.alert('Успіх', `Папку "${folderName}" створено.`); 
+        } catch (error) { 
+            console.error('Error creating folder:', error); 
+            Alert.alert('Помилка', 'Не вдалося створити папку.'); 
+        } 
+    };
 
-    if (isLoading && items.length === 0 && !currentPath.includes('AppData')) { 
+    const handleShowInfo = (item) => { 
+        setSelectedItemForInfo(item); 
+        setInfoModalVisible(true); 
+    };
+    
+    const isEffectivelyAtRoot = () => {
+        if (currentPath === basePath) return true;
+        if (basePath === FileSystem.documentDirectory && currentPath === FileSystem.documentDirectory) return true;
+        return false;
+    };
+
+    if (isLoading && items.length === 0 && currentPath === basePath && !currentPath.includes('AppData')) { 
         return (
             <SafeAreaView style={[styles.fullScreenCentered]} edges={['bottom', 'left', 'right']}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -137,25 +177,22 @@ export default function FileManagerScreen({ route, navigation }) {
         )
     }
 
-    const isAtBaseOrDocRoot = currentPath === basePath || 
-                             (currentPath === FileSystem.documentDirectory && basePath.startsWith(FileSystem.documentDirectory));
-
     return (
         <SafeAreaView style={styles.safeAreaContainer} edges={['bottom', 'left', 'right']}>
             <View style={styles.navigationHeader}>
                 <TouchableOpacity
                     onPress={goUpOneLevel}
                     style={styles.upButton}
-                    disabled={isAtBaseOrDocRoot}
+                    disabled={isEffectivelyAtRoot()}
                 >
                     <Ionicons
                         name="arrow-up-circle-outline"
                         size={28}
-                        color={isAtBaseOrDocRoot ? theme.colors.disabled : theme.colors.primary} />
+                        color={isEffectivelyAtRoot() ? theme.colors.disabled : theme.colors.primary} />
                     <Text
                         style={[
                             styles.upButtonText,
-                            isAtBaseOrDocRoot && styles.disabledText
+                            isEffectivelyAtRoot() && styles.disabledText
                         ]}
                     > Вгору</Text>
                 </TouchableOpacity>
@@ -168,20 +205,35 @@ export default function FileManagerScreen({ route, navigation }) {
                 renderItem={({item}) => <FileListItem item={item} onPressItem={handleItemPress} onShowInfo={handleShowInfo} /> }
                 keyExtractor={(item) => item.uri}
                 ListEmptyComponent={<Text style={styles.emptyListText}>Папка порожня</Text>}
-                contentContainerStyle={{ paddingBottom: 80 }} 
+                contentContainerStyle={{ paddingBottom: 80 }}
             />
 
             <View style={styles.bottomActionsContainer}>
-                <TouchableOpacity style={[styles.actionButton, {backgroundColor: theme.colors.accentOrange}]} onPress={showCreateFolderModal}>
+                <TouchableOpacity style={[styles.actionButton, {backgroundColor: theme.colors.accentOrange}]} onPress={() => setFolderModalVisible(true)}>
                     <Ionicons name="folder-open-outline" size={20} color={theme.colors.surface} />
                     <Text style={styles.actionButtonText}>Нова папка</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionButton, {backgroundColor: theme.colors.primary}]} onPress={showCreateFileModal}>
+                <TouchableOpacity style={[styles.actionButton, {backgroundColor: theme.colors.primary}]} onPress={() => setFileModalVisible(true)}>
                     <Ionicons name="document-text-outline" size={20} color={theme.colors.surface} />
                     <Text style={styles.actionButtonText}>Новий файл</Text>
                 </TouchableOpacity>
             </View>
             
+            <CreateFileModal 
+                visible={isFileModalVisible}
+                onClose={() => setFileModalVisible(false)}
+                onCreate={handleCreateFile}
+            />
+            <CreateFolderModal
+                visible={isFolderModalVisible}
+                onClose={() => setFolderModalVisible(false)}
+                onCreate={handleCreateFolder}
+            />
+            <InfoModal
+                visible={isInfoModalVisible}
+                onClose={() => setInfoModalVisible(false)}
+                item={selectedItemForInfo}
+            />
         </SafeAreaView>
     );
 };
