@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import {
   TapGestureHandler,
   LongPressGestureHandler,
@@ -40,6 +40,11 @@ export default function ClickableObject() {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
+
+  const panRef = React.useRef(null);
+  const flingLeftRef = React.useRef(null);
+  const flingRightRef = React.useRef(null);
+  const pinchRef = React.useRef(null);
 
   const panGestureHandler = useAnimatedGestureHandler({
     onStart: (_, ctx) => {
@@ -109,37 +114,55 @@ export default function ClickableObject() {
   };
 
   return (
-    <PinchGestureHandler onGestureEvent={pinchGestureHandler}>
+    <PinchGestureHandler
+        ref={pinchRef}
+        onGestureEvent={pinchGestureHandler}
+        simultaneousHandlers={[panRef, flingLeftRef, flingRightRef]}
+    >
       <Animated.View>
-        <PanGestureHandler onGestureEvent={panGestureHandler}>
+        <PanGestureHandler
+          ref={panRef}
+          onGestureEvent={panGestureHandler}
+          activeOffsetX={[-20, 20]} 
+          activeOffsetY={[-20, 20]} 
+          simultaneousHandlers={[pinchRef, flingLeftRef, flingRightRef]}
+        >
           <Animated.View style={animatedStyle}>
             <FlingGestureHandler
+              ref={flingLeftRef}
               direction={Directions.LEFT}
               onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingLeftActive)()}
+              simultaneousHandlers={[panRef, pinchRef]}
             >
-              <FlingGestureHandler
-                direction={Directions.RIGHT}
-                onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingRightActive)()}
-              >
-                <LongPressGestureHandler
-                  onHandlerStateChange={onLongPressStateChange}
-                  minDurationMs={LONG_PRESS_DURATION_MS}
+              <Animated.View> 
+                <FlingGestureHandler
+                  ref={flingRightRef}
+                  direction={Directions.RIGHT}
+                  onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingRightActive)()}
+                  simultaneousHandlers={[panRef, pinchRef]}
                 >
-                  <TapGestureHandler
-                    onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onDoubleTapActive)()}
-                    numberOfTaps={2}
-                  >
-                    <TapGestureHandler
-                      onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onSingleTapActive)()}
-                      numberOfTaps={1}
+                  <Animated.View>
+                    <LongPressGestureHandler
+                      onHandlerStateChange={onLongPressStateChange}
+                      minDurationMs={LONG_PRESS_DURATION_MS}
                     >
-                      <Animated.View style={styles.clickableObject}>
-                        <Text style={styles.objectText}>Клікай!</Text>
-                      </Animated.View>
-                    </TapGestureHandler>
-                  </TapGestureHandler>
-                </LongPressGestureHandler>
-              </FlingGestureHandler>
+                      <TapGestureHandler
+                        onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onDoubleTapActive)()}
+                        numberOfTaps={2}
+                      >
+                        <TapGestureHandler
+                          onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onSingleTapActive)()}
+                          numberOfTaps={1}
+                        >
+                          <Animated.View style={styles.clickableObject}>
+                            <Text style={styles.objectText}>Клікай!</Text>
+                          </Animated.View>
+                        </TapGestureHandler>
+                      </TapGestureHandler>
+                    </LongPressGestureHandler>
+                  </Animated.View>
+                </FlingGestureHandler>
+              </Animated.View>
             </FlingGestureHandler>
           </Animated.View>
         </PanGestureHandler>
@@ -152,7 +175,7 @@ const styles = StyleSheet.create({
   clickableObject: {
     width: OBJECT_SIZE,
     height: OBJECT_SIZE,
-    backgroundColor: 'deepskyblue', 
+    backgroundColor: 'deepskyblue',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: OBJECT_SIZE / 2,
