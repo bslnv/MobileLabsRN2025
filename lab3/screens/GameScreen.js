@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useContext } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import {
   TapGestureHandler,
   LongPressGestureHandler,
   PanGestureHandler,
   FlingGestureHandler,
-  PinchGestureHandler, // Додано
+  PinchGestureHandler,
   State,
   Directions,
 } from 'react-native-gesture-handler';
@@ -13,48 +13,26 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   useAnimatedGestureHandler,
-  withSpring,
   runOnJS,
 } from 'react-native-reanimated';
+import { GameContext } from '../contexts/GameContext';
 
 const SINGLE_TAP_POINTS = 1;
 const DOUBLE_TAP_POINTS = 2;
 const LONG_PRESS_POINTS = 5;
 const LONG_PRESS_DURATION_MS = 500;
 const FLING_MAX_POINTS = 10;
-const PINCH_BONUS_POINTS = 10; // Бонус за масштабування
+const PINCH_BONUS_POINTS = 10;
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const OBJECT_SIZE = 150;
 
 export default function GameScreen() {
-  const [score, setScore] = useState(0);
+  const { score, recordSingleTap, recordDoubleTap, recordLongPress } = useContext(GameContext);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const scale = useSharedValue(1); // Shared value для масштабу
-
-  const addScore = (points) => {
-    setScore((prevScore) => prevScore + points);
-  };
-
-  const onSingleTapEvent = (event) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      addScore(SINGLE_TAP_POINTS);
-    }
-  };
-
-  const onDoubleTapEvent = (event) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      addScore(DOUBLE_TAP_POINTS);
-    }
-  };
-
-  const onLongPressEvent = (event) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      addScore(LONG_PRESS_POINTS);
-    }
-  };
+  const scale = useSharedValue(1);
 
   const panGestureHandler = useAnimatedGestureHandler({
     onStart: (_, ctx) => {
@@ -64,9 +42,6 @@ export default function GameScreen() {
     onActive: (event, ctx) => {
       translateX.value = ctx.startX + event.translationX;
       translateY.value = ctx.startY + event.translationY;
-    },
-    onEnd: (_) => {
-      // Можна додати логіку повернення або анімації
     },
   });
 
@@ -78,12 +53,9 @@ export default function GameScreen() {
       scale.value = ctx.startScale * event.scale;
     },
     onEnd: (_, ctx) => {
-      // Якщо відбулося масштабування, додаємо очки
-      if (scale.value !== ctx.startScale && scale.value !== 1) { // Перевіряємо, чи масштаб змінився
-         runOnJS(addScore)(PINCH_BONUS_POINTS);
+      if (scale.value !== ctx.startScale && scale.value !== 1) {
+        runOnJS(recordLongPress)(PINCH_BONUS_POINTS, 0);
       }
-      // Можна додати анімацію повернення до початкового масштабу:
-      // scale.value = withSpring(1);
     },
   });
 
@@ -92,16 +64,31 @@ export default function GameScreen() {
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
-        { scale: scale.value }, // Додано масштабування
+        { scale: scale.value },
       ],
     };
   });
 
-  const onFlingEvent = (event) => {
+  const onSingleTapActive = () => {
+    recordSingleTap();
+  };
+
+  const onDoubleTapActive = () => {
+    recordDoubleTap();
+  };
+  
+  const onLongPressStateChange = (event) => {
     if (event.nativeEvent.state === State.ACTIVE) {
-      const randomPoints = Math.floor(Math.random() * FLING_MAX_POINTS) + 1;
-      runOnJS(addScore)(randomPoints);
+      runOnJS(recordLongPress)(LONG_PRESS_POINTS, LONG_PRESS_DURATION_MS); 
     }
+    if (event.nativeEvent.state === State.END || event.nativeEvent.state === State.CANCELLED) {
+      runOnJS(recordLongPress)(0, event.nativeEvent.duration);
+    }
+  };
+  
+  const onFlingActive = () => {
+    const randomPoints = Math.floor(Math.random() * FLING_MAX_POINTS) + 1;
+    recordLongPress(randomPoints, 0); 
   };
 
   return (
@@ -117,18 +104,18 @@ export default function GameScreen() {
               <Animated.View style={animatedStyle}>
                 <FlingGestureHandler
                   direction={Directions.RIGHT | Directions.LEFT | Directions.UP | Directions.DOWN}
-                  onHandlerStateChange={onFlingEvent}
+                  onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingActive)()}
                 >
                   <LongPressGestureHandler
-                    onHandlerStateChange={onLongPressEvent}
+                    onHandlerStateChange={onLongPressStateChange}
                     minDurationMs={LONG_PRESS_DURATION_MS}
                   >
                     <TapGestureHandler
-                      onHandlerStateChange={onDoubleTapEvent}
+                      onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onDoubleTapActive)()}
                       numberOfTaps={2}
                     >
                       <TapGestureHandler
-                        onHandlerStateChange={onSingleTapEvent}
+                        onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onSingleTapActive)()}
                         numberOfTaps={1}
                       >
                         <Animated.View style={styles.clickableObject}>

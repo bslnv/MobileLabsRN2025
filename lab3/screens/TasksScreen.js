@@ -1,30 +1,36 @@
-import React, { useState } from 'react';
+import React, { useContext } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-
-const initialTasks = [
-  { id: '1', text: 'Зробити 10 кліків', completed: false, targetClicks: 10, currentProgress: 0 },
-  { id: '2', text: 'Зробити подвійний клік 5 разів', completed: false, targetDoubleClicks: 5, currentProgress: 0 },
-  { id: '3', text: 'Утримувати об\'єкт 3 секунди', completed: false, targetHoldDuration: 3000, currentProgress: 0 },
-  { id: '4', text: 'Перетягнути об\'єкт', completed: false },
-  { id: '5', text: 'Зробити свайп вправо', completed: false },
-  { id: '6', text: 'Зробити свайп вліво', completed: false },
-  { id: '7', text: 'Змінити розмір об\'єкта', completed: false },
-  { id: '8', text: 'Отримати 100 очок', completed: false, targetScore: 100, currentProgress: 0 },
-];
+import { GameContext } from '../contexts/GameContext';
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState(initialTasks);
+  const { tasks, score } = useContext(GameContext);
 
-  const renderTaskItem = ({ item }) => (
-    <View style={[styles.taskItem, item.completed ? styles.taskItemCompleted : {}]}>
-      <Text style={[styles.taskText, item.completed ? styles.taskTextCompleted : {}]}>
-        {item.text}
-      </Text>
-      <Text style={styles.taskStatus}>
-        {item.completed ? '✅ Виконано' : '⏳ В процесі'}
-      </Text>
-    </View>
-  );
+  const renderTaskItem = ({ item }) => {
+    let progressText = '';
+    if (item.type === 'singleTap' || item.type === 'doubleTap' || item.type === 'score' || item.type === 'longPressDuration') {
+        const currentDisplayProgress = item.type === 'longPressDuration' && item.target ? (item.progress / 1000).toFixed(1) : item.progress;
+        const targetDisplayProgress = item.type === 'longPressDuration' && item.target ? (item.target / 1000).toFixed(1) : item.target;
+        
+        if (item.target !== undefined) {
+             progressText = `(${currentDisplayProgress} / ${targetDisplayProgress})`;
+        }
+    }
+    
+    return (
+        <View style={[styles.taskItem, item.completed ? styles.taskItemCompleted : {}]}>
+        <View style={styles.taskTextContainer}>
+            <Text style={[styles.taskText, item.completed ? styles.taskTextCompleted : {}]}>
+            {item.text}
+            </Text>
+            {!item.completed && progressText && <Text style={styles.progressText}>{progressText}</Text>}
+        </View>
+        <Text style={[styles.taskStatus, item.completed ? styles.taskStatusCompleted : {}]}>
+            {item.completed ? '✅ Виконано' : '⏳ В процесі'}
+        </Text>
+        </View>
+    );
+  };
+
 
   return (
     <View style={styles.container}>
@@ -34,6 +40,7 @@ export default function TasksScreen() {
         renderItem={renderTaskItem}
         keyExtractor={item => item.id}
         style={styles.list}
+        extraData={tasks} 
       />
     </View>
   );
@@ -57,36 +64,47 @@ const styles = StyleSheet.create({
   },
   taskItem: {
     backgroundColor: '#fff',
-    padding: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
     marginVertical: 8,
     marginHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
+    shadowOpacity: 0.18,
+    shadowRadius: 1.00,
   },
   taskItemCompleted: {
-    backgroundColor: '#e0ffe0',
-    borderColor: 'green',
+    backgroundColor: '#d4edda', 
+    borderColor: '#c3e6cb',
     borderWidth: 1,
+  },
+  taskTextContainer: {
+    flex: 1,
+    marginRight: 10,
   },
   taskText: {
     fontSize: 16,
     color: '#333',
-    flexShrink: 1,
   },
   taskTextCompleted: {
     textDecorationLine: 'line-through',
     color: '#555',
   },
+  progressText: {
+    fontSize: 12,
+    color: 'gray',
+    marginTop: 4,
+  },
   taskStatus: {
     fontSize: 14,
-    color: 'gray',
-    marginLeft: 10,
+    fontWeight: 'bold',
+  },
+  taskStatusCompleted: {
+      color: 'green',
   }
 });
