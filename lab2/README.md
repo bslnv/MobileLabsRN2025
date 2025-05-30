@@ -8,6 +8,7 @@
 ![4](screenshots/Screenshot_4.png)
 ![5](screenshots/Screenshot_5.png)
 ![6](screenshots/Screenshot_6.png)
+![7](screenshots/Screenshot_7.png)
 
 ### Як запустити
 
