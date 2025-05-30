@@ -21,14 +21,23 @@ const SINGLE_TAP_POINTS = 1;
 const DOUBLE_TAP_POINTS = 2;
 const LONG_PRESS_POINTS = 5;
 const LONG_PRESS_DURATION_MS = 500;
-const FLING_MAX_POINTS = 10;
+const FLING_RANDOM_POINTS_MAX = 10;
 const PINCH_BONUS_POINTS = 10;
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const OBJECT_SIZE = 150;
 
 export default function GameScreen() {
-  const { score, recordSingleTap, recordDoubleTap, recordLongPress } = useContext(GameContext);
+  const { 
+    score, 
+    recordSingleTap, 
+    recordDoubleTap, 
+    recordLongPress,
+    recordPan,
+    recordFlingRight,
+    recordFlingLeft,
+    recordPinch
+  } = useContext(GameContext);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -43,6 +52,11 @@ export default function GameScreen() {
       translateX.value = ctx.startX + event.translationX;
       translateY.value = ctx.startY + event.translationY;
     },
+    onEnd: (event, _) => {
+      if (Math.abs(event.translationX) > 10 || Math.abs(event.translationY) > 10) { // Вважаємо, що перетягування відбулося
+        runOnJS(recordPan)();
+      }
+    },
   });
 
   const pinchGestureHandler = useAnimatedGestureHandler({
@@ -53,8 +67,8 @@ export default function GameScreen() {
       scale.value = ctx.startScale * event.scale;
     },
     onEnd: (_, ctx) => {
-      if (scale.value !== ctx.startScale && scale.value !== 1) {
-        runOnJS(recordLongPress)(PINCH_BONUS_POINTS, 0);
+      if (scale.value !== ctx.startScale && Math.abs(scale.value - 1) > 0.1) { // Перевіряємо, чи масштаб значно змінився
+        runOnJS(recordPinch)(PINCH_BONUS_POINTS);
       }
     },
   });
@@ -86,10 +100,16 @@ export default function GameScreen() {
     }
   };
   
-  const onFlingActive = () => {
-    const randomPoints = Math.floor(Math.random() * FLING_MAX_POINTS) + 1;
-    recordLongPress(randomPoints, 0); 
+  const onFlingRightActive = () => {
+    const randomPoints = Math.floor(Math.random() * FLING_RANDOM_POINTS_MAX) + 1;
+    recordFlingRight(randomPoints); 
   };
+  
+  const onFlingLeftActive = () => {
+    const randomPoints = Math.floor(Math.random() * FLING_RANDOM_POINTS_MAX) + 1;
+    recordFlingLeft(randomPoints);
+  };
+
 
   return (
     <View style={styles.container}>
@@ -103,27 +123,32 @@ export default function GameScreen() {
             <PanGestureHandler onGestureEvent={panGestureHandler}>
               <Animated.View style={animatedStyle}>
                 <FlingGestureHandler
-                  direction={Directions.RIGHT | Directions.LEFT | Directions.UP | Directions.DOWN}
-                  onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingActive)()}
+                  direction={Directions.LEFT}
+                  onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingLeftActive)()}
                 >
-                  <LongPressGestureHandler
-                    onHandlerStateChange={onLongPressStateChange}
-                    minDurationMs={LONG_PRESS_DURATION_MS}
+                  <FlingGestureHandler
+                    direction={Directions.RIGHT}
+                    onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onFlingRightActive)()}
                   >
-                    <TapGestureHandler
-                      onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onDoubleTapActive)()}
-                      numberOfTaps={2}
+                    <LongPressGestureHandler
+                      onHandlerStateChange={onLongPressStateChange}
+                      minDurationMs={LONG_PRESS_DURATION_MS}
                     >
                       <TapGestureHandler
-                        onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onSingleTapActive)()}
-                        numberOfTaps={1}
+                        onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onDoubleTapActive)()}
+                        numberOfTaps={2}
                       >
-                        <Animated.View style={styles.clickableObject}>
-                          <Text style={styles.objectText}>Клікай!</Text>
-                        </Animated.View>
+                        <TapGestureHandler
+                          onHandlerStateChange={(event) => event.nativeEvent.state === State.ACTIVE && runOnJS(onSingleTapActive)()}
+                          numberOfTaps={1}
+                        >
+                          <Animated.View style={styles.clickableObject}>
+                            <Text style={styles.objectText}>Клікай!</Text>
+                          </Animated.View>
+                        </TapGestureHandler>
                       </TapGestureHandler>
-                    </TapGestureHandler>
-                  </LongPressGestureHandler>
+                    </LongPressGestureHandler>
+                  </FlingGestureHandler>
                 </FlingGestureHandler>
               </Animated.View>
             </PanGestureHandler>

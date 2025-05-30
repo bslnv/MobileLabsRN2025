@@ -16,9 +16,15 @@ export const GameContext = createContext();
 export const GameProvider = ({ children }) => {
   const [score, setScore] = useState(0);
   const [tasks, setTasks] = useState(initialTasksData);
+  
   const [singleTapCount, setSingleTapCount] = useState(0);
   const [doubleTapCount, setDoubleTapCount] = useState(0);
   const [lastLongPressDuration, setLastLongPressDuration] = useState(0);
+  
+  const [panPerformed, setPanPerformed] = useState(false);
+  const [flingRightPerformed, setFlingRightPerformed] = useState(false);
+  const [flingLeftPerformed, setFlingLeftPerformed] = useState(false);
+  const [pinchPerformed, setPinchPerformed] = useState(false);
 
   const updateScore = useCallback((points) => {
     setScore(prevScore => prevScore + points);
@@ -43,6 +49,24 @@ export const GameProvider = ({ children }) => {
     }
   }, [updateScore]);
 
+  const recordPan = useCallback(() => {
+    setPanPerformed(true);
+  }, []);
+
+  const recordFlingRight = useCallback((points) => {
+    setFlingRightPerformed(true);
+    updateScore(points);
+  }, [updateScore]);
+
+  const recordFlingLeft = useCallback((points) => {
+    setFlingLeftPerformed(true);
+    updateScore(points);
+  }, [updateScore]);
+
+  const recordPinch = useCallback((points) => {
+    setPinchPerformed(true);
+    updateScore(points);
+  }, [updateScore]);
 
   useEffect(() => {
     setTasks(prevTasks =>
@@ -72,13 +96,26 @@ export const GameProvider = ({ children }) => {
             newProgress = score;
             if (newProgress >= task.target) isCompleted = true;
             break;
+          case 'pan':
+            if (panPerformed) isCompleted = true;
+            break;
+          case 'flingRight':
+            if (flingRightPerformed) isCompleted = true;
+            break;
+          case 'flingLeft':
+            if (flingLeftPerformed) isCompleted = true;
+            break;
+          case 'pinch':
+            if (pinchPerformed) isCompleted = true;
+            break;
           default:
             return task;
         }
+        if (isCompleted) newProgress = task.target !== undefined ? task.target : 1;
         return { ...task, progress: newProgress, completed: isCompleted };
       })
     );
-  }, [score, singleTapCount, doubleTapCount, lastLongPressDuration]);
+  }, [score, singleTapCount, doubleTapCount, lastLongPressDuration, panPerformed, flingRightPerformed, flingLeftPerformed, pinchPerformed]);
 
   return (
     <GameContext.Provider
@@ -88,6 +125,10 @@ export const GameProvider = ({ children }) => {
         recordSingleTap,
         recordDoubleTap,
         recordLongPress,
+        recordPan,
+        recordFlingRight,
+        recordFlingLeft,
+        recordPinch,
       }}
     >
       {children}
